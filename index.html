@@ -789,8 +789,23 @@ dm_puddle/dt = X*mdot_f_inj - m_puddle/tau</pre>
         cheap option recovers precisely nothing, because shaft speed and the compressor
         coefficient appear only as their product in the pressure it would measure. A wastegate
         sweep, which I had ranked first, does not cross the structural barrier either.</p>
+      <p>Then the same analysis took the shopping list away again. Compressor efficiency is
+        already pinned to a digitized manufacturer curve rather than learned. Pinning turbine
+        efficiency the same way, to the standard parabola in blade speed ratio, makes every
+        remaining air-path parameter identifiable from manifold pressure alone, exhaust
+        temperature and shaft speed included. Neither freeze does this by itself; two frozen maps
+        at opposite ends of the shaft close a loop that neither closes alone. The turbine curve
+        costs two constants.</p>
+      <p>That is not a free lunch and should not be sold as one. Freezing does not identify
+        turbine efficiency, it assumes it, from a curve describing the turbo family rather than
+        this specific worn unit. The compressor-side version of exactly that assumption was
+        already measured wrong here: the map recovered by inversion peaks near PR&nbsp;1.8 against
+        a generic digitized TD04 that under-produced. So the trade is an unidentifiable parameter
+        swapped for an assumed one carrying unknown bias, which is a better position to be in, and
+        it turns the exhaust probe from a prerequisite into a way of checking the assumption.</p>
       <p>The useful output of the exercise is not knowing which measurements would move the
-        result. It is having a way to ask that question before buying the sensor.</p>
+        result. It is having a way to ask that question before buying the sensor, and getting an
+        answer that twice contradicted what I was about to do.</p>
       <p>Two further caveats worth stating plainly. Cross-log generalisation was measured at
         45.3&nbsp;kPa, but at an earlier model predating staged identification, so that figure is
         stale rather than current. And the uncertainty calibration uses a vehicle-dynamics torque
