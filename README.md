@@ -1,4 +1,4 @@
-# Identifying a Grey-Box Engine Model from a Single ECU Datalog
+# Identifying a Grey-Box Engine Model from Consumer ECU Datalogs
 
 **Read the writeup: https://tuckerjashmore-afk.github.io/neural-ode-engine-model/**
 

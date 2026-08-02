@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Identifying a Grey-Box Engine Model from a Single ECU Datalog</title>
+<title>Identifying a Grey-Box Engine Model from Consumer ECU Datalogs</title>
 <meta name="description" content="A grey-box neural-ODE model of a turbocharged engine that fit the measured data well and got the physics badly wrong - how that was diagnosed, and the staged identification method that fixed it.">
 <meta name="author" content="Tucker Ashmore">
 <meta property="og:type" content="article">
-<meta property="og:title" content="Identifying a Grey-Box Engine Model from a Single ECU Datalog">
+<meta property="og:title" content="Identifying a Grey-Box Engine Model from Consumer ECU Datalogs">
 <meta property="og:description" content="A grey-box neural-ODE model of a turbocharged engine that fit the measured data well and got the physics badly wrong - how that was diagnosed, and the staged identification method that fixed it.">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%8C%80</text></svg>">
@@ -440,7 +440,7 @@
 
   <header class="masthead">
     <p class="eyebrow">Grey-box system identification &middot; Julia / SciML</p>
-    <h1>Identifying a grey-box engine model from a single ECU datalog</h1>
+    <h1>Identifying a grey-box engine model from consumer ECU datalogs</h1>
     <p class="standfirst">A neural-ODE model of a turbocharged Subaru EJ255 that fit the measured
       data well and got the physics badly wrong &mdash; how that was diagnosed, and the staged
       identification method that fixed it.</p>
@@ -491,11 +491,14 @@
         integrating the ODE and back-propagating trajectory error onto the network weights through
         the solver adjoint.</p>
       <p>Target hardware is a Subaru EJ255, 2.5&nbsp;L flat-four, TD04-13T turbo. The data is stock
-        ECU datalogs at roughly 50&nbsp;Hz, and that is where the difficulty enters. A dyno cell
-        measures airflow, exhaust temperature, turbo speed and torque directly. A stock ECU log
-        gives manifold pressure, engine speed, throttle position, commanded lambda, spark advance
-        and an inferred engine load. One of those is a trajectory the model can be fit against.
-        The rest are inputs.</p>
+        ECU datalogs at roughly 50&nbsp;Hz &mdash; six logs across three logging platforms, 7,109
+        rows in the merged set, plus the LiU-ICE academic engine benchmark run through the same
+        pipeline as an external check.</p>
+      <p>Volume is not the difficulty. <em>Which channels a stock ECU exposes</em> is. A dyno cell
+        measures airflow, exhaust temperature, turbo speed and torque directly. A stock ECU gives
+        manifold pressure, engine speed, throttle position, commanded lambda, spark advance and an
+        inferred engine load. Exactly one of those is a trajectory the model can be fit against.
+        Everything else is an input.</p>
     </div>
   </section>
 
@@ -760,16 +763,25 @@ dm_puddle/dt = X*mdot_f_inj - m_puddle/tau</pre>
     <div class="section-num">08</div>
     <div class="section-body">
       <h2>Limits, and what would move them</h2>
-      <p>One quasi-steady wide-open-throttle log from one vehicle. No wastegate-duty sweep, no EGT
-        sensor, no dyno torque. Turbine efficiency and exhaust temperature are identified only as
-        a product. Cross-log generalisation was measured at 45.3&nbsp;kPa but at an earlier model
-        that predates staged identification, so it has not been re-measured. The uncertainty
-        calibration uses a vehicle-dynamics torque pseudo-label, and the fitted scale factor of
-        5.29 says the raw ensemble is roughly five times overconfident against it.</p>
-      <p>The single largest lever is <strong>a wastegate-duty sweep with an EGT sensor</strong>.
-        Stepping wastegate duty across one pull directly observes turbine efficiency against
-        boost, and EGT splits the efficiency-temperature product into absolute calibrations. That
-        is a data-collection problem, not a modelling one.</p>
+      <p>The dataset is six logs across three logging platforms &mdash; Cobb, RomRaider and
+        Viceman &mdash; totalling 7,109 rows in the merged set, alongside the LiU-ICE academic
+        engine benchmark converted into the same pipeline as an external check on the cleaning and
+        windowing code. Volume is not the constraint. <strong>Two specific missing measurements
+        are.</strong></p>
+      <p><strong>No exhaust-gas temperature channel.</strong> Turbine efficiency and exhaust
+        temperature multiply in the turbine power balance, so only their product is identifiable.
+        That product is what the turbo speed ODE depends on, so the model is correct where it is
+        used &mdash; but neither factor is separately calibrated.</p>
+      <p><strong>No wastegate-duty sweep.</strong> Stepping wastegate duty across a single pull is
+        what observes turbine efficiency against boost independently of the rest of the air path.</p>
+      <p>Those two set the ~15&nbsp;kPa floor, and both are an afternoon of instrumented driving.
+        Knowing precisely which two measurements would move the result is the useful output of the
+        whole exercise.</p>
+      <p>Two further caveats worth stating plainly. Cross-log generalisation was measured at
+        45.3&nbsp;kPa, but at an earlier model predating staged identification, so that figure is
+        stale rather than current. And the uncertainty calibration uses a vehicle-dynamics torque
+        pseudo-label rather than a dyno; the fitted scale factor of 5.29 says the raw ensemble is
+        roughly five times overconfident against that label.</p>
     </div>
   </section>
 
@@ -793,7 +805,6 @@ dm_puddle/dt = X*mdot_f_inj - m_puddle/tau</pre>
 <style>
   .mono { font-family: var(--mono); font-size: 0.9em; }
 </style>
-
 <script>
   (function () {
     var root = document.documentElement;
