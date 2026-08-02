@@ -670,7 +670,9 @@ dm_puddle/dt = X*mdot_f_inj - m_puddle/tau</pre>
         fit to that. The product is a genuine limitation rather than a shortcut: this log set has
         no EGT sensor and the two factors multiply, so only their product is identifiable. It
         happens to be the product the turbo speed ODE depends on, so the model is correct where it
-        is used, but neither factor is separately calibrated.</p>
+        is used, but neither factor is separately calibrated. Splitting them needs more than an
+        exhaust probe: turbine efficiency is nonidentifiable in nine of ten measurement scenarios,
+        and only exhaust temperature and shaft speed together recover it.</p>
     </div>
   </section>
 
@@ -775,11 +777,20 @@ dm_puddle/dt = X*mdot_f_inj - m_puddle/tau</pre>
         temperature multiply in the turbine power balance, so only their product is identifiable.
         That product is what the turbo speed ODE depends on, so the model is correct where it is
         used, but neither factor is separately calibrated.</p>
-      <p><strong>No wastegate-duty sweep.</strong> Stepping wastegate duty across a single pull is
-        what observes turbine efficiency against boost independently of the rest of the air path.</p>
-      <p>Those two set the ~15&nbsp;kPa floor, and both are an afternoon of instrumented driving.
-        Knowing precisely which two measurements would move the result is the useful output of the
-        whole exercise.</p>
+      <p><strong>No turbo shaft speed measurement.</strong> This is the binding one, and it was
+        not the one I expected. Turbine efficiency stays nonidentifiable under an exhaust probe
+        alone; recovering it takes exhaust temperature and shaft speed together.</p>
+      <p>Those two set the ~15&nbsp;kPa floor. I had a different pair written down until I ran a
+        structural identifiability analysis on the air path, which decides algebraically which
+        parameters the measurements determine, with no data and no optimiser. It overturned the
+        plan three times over: the degeneracy is confined to the turbocharger shaft rather than
+        spread across the model, freezing compressor efficiency makes turbo speed identifiable
+        with no new hardware at all, and the pre-throttle pressure sensor I had costed as the
+        cheap option recovers precisely nothing, because shaft speed and the compressor
+        coefficient appear only as their product in the pressure it would measure. A wastegate
+        sweep, which I had ranked first, does not cross the structural barrier either.</p>
+      <p>The useful output of the exercise is not knowing which measurements would move the
+        result. It is having a way to ask that question before buying the sensor.</p>
       <p>Two further caveats worth stating plainly. Cross-log generalisation was measured at
         45.3&nbsp;kPa, but at an earlier model predating staged identification, so that figure is
         stale rather than current. And the uncertainty calibration uses a vehicle-dynamics torque
