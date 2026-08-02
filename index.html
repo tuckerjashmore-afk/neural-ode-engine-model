@@ -1,0 +1,813 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Identifying a Grey-Box Engine Model from a Single ECU Datalog</title>
+<meta name="description" content="A grey-box neural-ODE model of a turbocharged engine that fit the measured data well and got the physics badly wrong - how that was diagnosed, and the staged identification method that fixed it.">
+<meta name="author" content="Tucker Ashmore">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Identifying a Grey-Box Engine Model from a Single ECU Datalog">
+<meta property="og:description" content="A grey-box neural-ODE model of a turbocharged engine that fit the measured data well and got the physics badly wrong - how that was diagnosed, and the staged identification method that fixed it.">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%8C%80</text></svg>">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body, h1, h2, h3, p, ul, ol, figure, table, caption { margin: 0; padding: 0; }
+  ul, ol { list-style-position: outside; }
+  img { max-width: 100%; display: block; }
+  table { border-collapse: collapse; }
+  button { font: inherit; color: inherit; }
+</style>
+<style>
+  :root {
+    --ground:      #FAFAFB;
+    --raised:      #FFFFFF;
+    --sunken:      #F1F2F5;
+    --ink:         #14181D;
+    --ink-soft:    #3D4650;
+    --muted:       #5C6672;
+    --hairline:    #DDE1E6;
+    --hairline-sf: #EAECEF;
+    --accent:      #B26B00;
+    --accent-soft: #FBF2E2;
+    --right:       #2A6F6B;
+    --right-soft:  #E6F1F0;
+    --wrong:       #A33B2A;
+    --wrong-soft:  #F8EAE7;
+
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --serif: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+
+    --measure: 66ch;
+    --rail: 3.5rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground:      #0E1116;
+      --raised:      #161B22;
+      --sunken:      #10151B;
+      --ink:         #E4E8ED;
+      --ink-soft:    #BAC2CC;
+      --muted:       #8B95A1;
+      --hairline:    #262C34;
+      --hairline-sf: #1C222A;
+      --accent:      #E8A33D;
+      --accent-soft: #2A2015;
+      --right:       #5FBFB5;
+      --right-soft:  #152725;
+      --wrong:       #E0705C;
+      --wrong-soft:  #2A1815;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0E1116;
+    --raised:      #161B22;
+    --sunken:      #10151B;
+    --ink:         #E4E8ED;
+    --ink-soft:    #BAC2CC;
+    --muted:       #8B95A1;
+    --hairline:    #262C34;
+    --hairline-sf: #1C222A;
+    --accent:      #E8A33D;
+    --accent-soft: #2A2015;
+    --right:       #5FBFB5;
+    --right-soft:  #152725;
+    --wrong:       #E0705C;
+    --wrong-soft:  #2A1815;
+  }
+
+  :root[data-theme="light"] {
+    --ground:      #FAFAFB;
+    --raised:      #FFFFFF;
+    --sunken:      #F1F2F5;
+    --ink:         #14181D;
+    --ink-soft:    #3D4650;
+    --muted:       #5C6672;
+    --hairline:    #DDE1E6;
+    --hairline-sf: #EAECEF;
+    --accent:      #B26B00;
+    --accent-soft: #FBF2E2;
+    --right:       #2A6F6B;
+    --right-soft:  #E6F1F0;
+    --wrong:       #A33B2A;
+    --wrong-soft:  #F8EAE7;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 1.0625rem;
+    line-height: 1.72;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 54rem;
+    margin: 0 auto;
+    padding: 0 1.5rem 6rem;
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+    padding: 4.5rem 0 2.5rem;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0;
+  }
+
+  .masthead h1 {
+    font-family: var(--sans);
+    font-weight: 800;
+    font-size: clamp(2rem, 5.5vw, 3.15rem);
+    line-height: 1.06;
+    letter-spacing: -0.032em;
+    text-wrap: balance;
+    margin: 0;
+    max-width: 20ch;
+  }
+
+  .standfirst {
+    font-size: 1.1875rem;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    margin: 0;
+    max-width: var(--measure);
+  }
+
+  .byline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  .byline strong { color: var(--ink-soft); font-weight: 600; }
+
+  /* ---------- hero readout ---------- */
+
+  .readout {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+    margin: 3rem 0 1rem;
+  }
+
+  .cell {
+    background: var(--raised);
+    padding: 1.5rem 1.375rem 1.625rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .cell-label {
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .cell-value {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 2.375rem;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cell-value span {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0;
+    margin-left: 0.25rem;
+  }
+
+  .verdict {
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.5rem;
+    align-self: flex-start;
+    margin-top: 0.125rem;
+  }
+
+  .verdict.bad  { background: var(--wrong-soft); color: var(--wrong); }
+  .verdict.good { background: var(--right-soft); color: var(--right); }
+
+  .readout-note {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    line-height: 1.65;
+    color: var(--muted);
+    margin: 0 0 1rem;
+  }
+
+  /* ---------- sections ---------- */
+
+  .section {
+    display: grid;
+    grid-template-columns: var(--rail) 1fr;
+    gap: 0 1.5rem;
+    padding-top: 3.75rem;
+  }
+
+  .section-num {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    padding-top: 0.55rem;
+    border-top: 2px solid var(--accent);
+    align-self: start;
+  }
+
+  .section-body { min-width: 0; }
+
+  .section-body > h2 {
+    font-family: var(--sans);
+    font-weight: 750;
+    font-size: clamp(1.375rem, 3vw, 1.75rem);
+    letter-spacing: -0.021em;
+    line-height: 1.22;
+    text-wrap: balance;
+    margin: 0 0 1.25rem;
+    padding-top: 0.25rem;
+  }
+
+  .section-body > h3 {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: -0.005em;
+    margin: 2.25rem 0 0.75rem;
+  }
+
+  .section-body > p {
+    margin: 0 0 1.15rem;
+    max-width: var(--measure);
+  }
+
+  .section-body > ul, .section-body > ol {
+    margin: 0 0 1.15rem;
+    padding-left: 1.15rem;
+    max-width: var(--measure);
+  }
+
+  .section-body li { margin-bottom: 0.55rem; }
+
+  strong { font-weight: 700; color: var(--ink); }
+  em { font-style: italic; }
+
+  .lede { font-size: 1.125rem; color: var(--ink-soft); }
+
+  /* ---------- pull statement ---------- */
+
+  .pull {
+    margin: 2rem 0;
+    padding: 1.5rem 0 1.5rem 1.5rem;
+    border-left: 2px solid var(--accent);
+    font-family: var(--sans);
+    font-size: 1.1875rem;
+    font-weight: 600;
+    line-height: 1.48;
+    letter-spacing: -0.014em;
+    color: var(--ink);
+    max-width: var(--measure);
+  }
+
+  /* ---------- tables ---------- */
+
+  .scroller {
+    overflow-x: auto;
+    margin: 0 0 1.5rem;
+    border: 1px solid var(--hairline);
+    background: var(--raised);
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-family: var(--mono);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  th, td {
+    padding: 0.6rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--hairline-sf);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  thead th {
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+
+  td.metric { color: var(--ink); font-weight: 600; }
+  td.ok     { color: var(--right); }
+  td.no     { color: var(--wrong); }
+  th[scope="row"] { font-weight: 600; color: var(--ink-soft); }
+
+  /* ---------- terminal ---------- */
+
+  .term {
+    background: var(--sunken);
+    border: 1px solid var(--hairline);
+    padding: 1.125rem 1.25rem;
+    overflow-x: auto;
+    margin: 0 0 1.5rem;
+  }
+
+  .term pre {
+    font-family: var(--mono);
+    font-size: 0.78125rem;
+    line-height: 1.72;
+    color: var(--ink-soft);
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .term-cap {
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 0.625rem;
+  }
+
+  /* ---------- footer ---------- */
+
+  .colophon {
+    display: grid;
+    grid-template-columns: var(--rail) 1fr;
+    gap: 0 1.5rem;
+    margin-top: 4.5rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--hairline);
+  }
+
+  .colophon-body {
+    font-family: var(--mono);
+    font-size: 0.78125rem;
+    line-height: 1.85;
+    color: var(--muted);
+    min-width: 0;
+  }
+
+  .colophon-body p { margin: 0 0 0.875rem; max-width: 60ch; }
+  .colophon-body strong { color: var(--ink-soft); font-weight: 600; }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  @media (max-width: 42rem) {
+    :root { --rail: 0px; }
+    .section, .colophon { grid-template-columns: 1fr; gap: 0; }
+    .section-num {
+      border-top: none;
+      padding-top: 0;
+      margin-bottom: 0.625rem;
+    }
+    .colophon > .section-num { margin-bottom: 1rem; }
+    .cell-value { font-size: 2rem; }
+  }
+</style>
+<style>
+  .themer {
+    position: fixed; top: 1rem; right: 1rem; z-index: 10;
+    background: var(--raised); color: var(--muted);
+    border: 1px solid var(--hairline); cursor: pointer;
+    font-family: var(--mono); font-size: 0.6875rem;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 0.5rem 0.75rem; line-height: 1;
+  }
+  .themer:hover { color: var(--accent); border-color: var(--accent); }
+  .themer:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media print { .themer { display: none; } }
+</style>
+</head>
+<body>
+<button class="themer" type="button" id="themer" aria-label="Toggle colour theme">Theme</button>
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Grey-box system identification &middot; Julia / SciML</p>
+    <h1>Identifying a grey-box engine model from a single ECU datalog</h1>
+    <p class="standfirst">A neural-ODE model of a turbocharged Subaru EJ255 that fit the measured
+      data well and got the physics badly wrong &mdash; how that was diagnosed, and the staged
+      identification method that fixed it.</p>
+    <p class="byline">
+      <span><strong>Tucker Ashmore</strong></span>
+      <span>Julia &middot; SciML &middot; Python</span>
+      <span>June&ndash;July 2026</span>
+    </p>
+  </header>
+
+  <div class="readout">
+    <div class="cell">
+      <span class="cell-label">Joint fit</span>
+      <span class="cell-value">9.8<span>kPa</span></span>
+      <span class="verdict bad">Fails physics</span>
+    </div>
+    <div class="cell">
+      <span class="cell-label">Staged, hard freeze</span>
+      <span class="cell-value">25.1<span>kPa</span></span>
+      <span class="verdict good">Physical</span>
+    </div>
+    <div class="cell">
+      <span class="cell-label">Staged + soft anchor</span>
+      <span class="cell-value">15.1<span>kPa</span></span>
+      <span class="verdict good">Physical</span>
+    </div>
+  </div>
+  <p class="readout-note">Manifold-pressure RMSE on held-out windows. The best number belongs to
+    the worst model.</p>
+
+  <section class="section">
+    <div class="section-num">01</div>
+    <div class="section-body">
+      <h2>The problem</h2>
+      <p class="lede">Tuning a turbocharged engine means choosing spark advance, fuel target and
+        boost at every operating point, subject to not destroying the engine. The interesting
+        question is what happens at points you have never run.</p>
+      <p>That requires a model that extrapolates, which requires the model's internal quantities
+        to mean what they claim to mean. Two standard options both fail that requirement.
+        <strong>Black-box regression</strong> on logged data interpolates well and extrapolates
+        arbitrarily &mdash; nothing in it is constrained to be physical. A <strong>full physical
+        mean-value model</strong> extrapolates correctly but needs calibration data a consumer
+        datalog does not contain: compressor and turbine maps for the specific unit, volumetric
+        efficiency surfaces, wall-film parameters.</p>
+      <p>The grey-box, or Universal Differential Equation, formulation takes the third path. Keep
+        the conservation laws and flow relations as a fixed ODE skeleton, and let neural networks
+        stand in for exactly the constitutive maps that are genuinely unknown. Train by
+        integrating the ODE and back-propagating trajectory error onto the network weights through
+        the solver adjoint.</p>
+      <p>Target hardware is a Subaru EJ255, 2.5&nbsp;L flat-four, TD04-13T turbo. The data is stock
+        ECU datalogs at roughly 50&nbsp;Hz, and that is where the difficulty enters. A dyno cell
+        measures airflow, exhaust temperature, turbo speed and torque directly. A stock ECU log
+        gives manifold pressure, engine speed, throttle position, commanded lambda, spark advance
+        and an inferred engine load. One of those is a trajectory the model can be fit against.
+        The rest are inputs.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-num">02</div>
+    <div class="section-body">
+      <h2>The model</h2>
+      <p>Four states are integrated in time: intake manifold pressure, turbo speed, fuel wall-film
+        mass, and metal temperature (frozen here, since its time constant far exceeds the
+        shooting window).</p>
+      <p>Turbo speed is carried as a sigmoid logit rather than directly. That matters more than it
+        looks: the bound becomes a property of the coordinate, so the state cannot go negative and
+        the Jacobian self-zeros at the rails instead of producing a discontinuous adjoint at a
+        clamp. An earlier version integrated turbo speed directly and clamped it &mdash; the clamp
+        masked the identifiability failure below, because manifold pressure still fit while the
+        underlying state ranged from &minus;927,000 to 57,000&nbsp;rad/s.</p>
+
+      <div class="term">
+        <p class="term-cap">Right-hand side &mdash; mean-value engine model</p>
+<pre>mdot_cyl  = eta_v * P_m * V_d * N / (2 * R * T_m)      speed-density
+P_boost   = P_atm * comp_map(omega, mdot_cyl)
+mdot_thr  = throttle_flow(alpha, P_boost, T_m, P_m)    compressible orifice
+P_exh     = P_atm + K * mdot_exh^2
+domega    = 1000*(P_turbine - P_compressor)/(I_t*omega) - C_friction*omega/I_t
+
+dP_m/dt      = (R*T_m/V_m) * (mdot_thr - mdot_cyl)
+dm_puddle/dt = X*mdot_f_inj - m_puddle/tau</pre>
+      </div>
+
+      <p><strong>Eleven neural maps</strong> replace the constitutive relations. Each is a
+        2&times;16 dense-tanh chain with an output activation enforcing its physical range:
+        volumetric efficiency to [0,&nbsp;1.2], compressor and turbine efficiency to
+        [0.4,&nbsp;0.85], pressure ratio to [1,&nbsp;5]. Inputs are normalised by a fixed per-map
+        scale, because raw engine speed near 6,000 and turbo speed near 100,000 saturate tanh into
+        dead gradients on the first forward pass.</p>
+      <p>Training is multiple shooting on ~1&nbsp;s windows, <span class="mono">Tsit5</span> for
+        integration, <span class="mono">InterpolatingAdjoint</span> with a
+        <span class="mono">ReverseDiffVJP</span> for gradients, and Adam over a 100-epoch MSE
+        warm-start followed by a 300-epoch Gaussian NLL fine-tune across mean and variance heads.
+        Six ensemble members train concurrently and supply the predictive variance.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-num">03</div>
+    <div class="section-body">
+      <h2>What went wrong</h2>
+      <p>Joint training converged. Solve rate 100&thinsp;%, held-out manifold-pressure RMSE
+        9.8&nbsp;kPa on a signal spanning about 100&nbsp;kPa. By the usual metric the model was
+        working. The maps were not.</p>
+
+      <div class="scroller">
+        <table>
+          <caption>Fitted internal quantities against physical reality</caption>
+          <thead>
+            <tr><th scope="col">Quantity</th><th scope="col">Fitted</th><th scope="col">Physical</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Volumetric efficiency at WOT</th><td class="no">1.06</td><td class="ok">~0.77</td></tr>
+            <tr><th scope="row">Turbo speed at full boost</th><td class="no">~1,300 rad/s</td><td class="ok">11,000&ndash;17,000 rad/s</td></tr>
+            <tr><th scope="row">Compressor pressure-ratio curve</th><td class="no">flat</td><td class="ok">peaks near 1.8</td></tr>
+            <tr><th scope="row">Exhaust backpressure</th><td class="no">112 kPa, below boost</td><td class="ok">must exceed boost</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Volumetric efficiency above 1.0 means more air entering the cylinder than the cylinder
+        displaces. Turbo speed of 1,300&nbsp;rad/s at full boost is the compressor barely turning
+        while producing 1.5&nbsp;bar. Exhaust pressure below boost pressure means the turbine is
+        being driven backwards.</p>
+      <p>These errors cancel. Low turbo speed gives low pressure ratio; inflated volumetric
+        efficiency compensates by pulling more air through the same manifold pressure; the
+        trajectory fits.</p>
+
+      <p class="pull">Eleven unknown maps trained against one observable trajectory is structurally
+        degenerate. Loss reweighting cannot fix it, because reweighting changes which combination
+        the optimiser lands on, not the dimension of the solution manifold.</p>
+
+      <p>Ten full training runs confirmed that empirically before the structural reading was
+        accepted. A volumetric-efficiency label anchor, a boost-channel weight, a boost-weighted
+        per-timestep loss, a hard airflow constraint, a throttle recalibration and a frozen
+        compressor-map lookup were each tried. Each moved the compensation somewhere else. Two
+        made the model worse.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-num">04</div>
+    <div class="section-body">
+      <h2>Finding the actual causes</h2>
+      <p>Each cause was isolated with a cheap targeted probe rather than another training run.</p>
+      <ol>
+        <li><strong>Turbo speed collapses because the turbine is energy-negative.</strong>
+          Decomposing <span class="mono">domega</span> at a high-boost point showed the turbine
+          producing ~0.6&nbsp;kW against a ~1.5&nbsp;kW compressor load. With that sign the state
+          must decelerate, and no penalty term can hold it up &mdash; confirmed dead up to a
+          weight of 5,000, by which point the penalty had wrecked the pressure fit and the turbo
+          speed had barely moved.</li>
+        <li><strong>The turbine is starved because backpressure is tiny.</strong> Measured
+          112&nbsp;kPa against 139&nbsp;kPa of boost, which is physically backwards. Since the
+          backpressure coefficient was plausible, airflow was wrong.</li>
+        <li><strong>Airflow is wrong because volumetric efficiency underfits.</strong> It sat at
+          0.38 against a 0.76 label. It was matched only in the NLL output loss, where channels
+          sum equally, so a residual of order 0.1&sup2; is drowned by torque residuals in
+          N&middot;m&sup2; and EGT residuals in K&sup2;.</li>
+      </ol>
+      <p>That closes the loop. Backpressure scales with the square of airflow, so a volumetric
+        efficiency at half its true value gives a quarter of the backpressure, which starves the
+        turbine, drains the turbo speed, kills boost, lowers manifold pressure and lowers airflow
+        again. The system is bistable and the shooting solver falls into the collapsed basin.</p>
+      <p>A separate high-boost shortfall localised to the <strong>throttle</strong>. Subaru logs
+        about 0.44 for &ldquo;throttle opening angle&rdquo; at wide-open throttle by drive-by-wire
+        convention, and the effective-area curve evaluated there gave only about 22&thinsp;% of
+        full area. The model was choking an engine its own compressor map was correctly boosting.</p>
+      <p>One more probe corrected an assumption carried for weeks: the logs are <em>not</em>
+        quasi-steady. The wide-open-throttle log contains 182 spool events. Turbo speed was not
+        unidentifiable for lack of transients &mdash; it was unidentifiable because a free neural
+        compressor map keyed on airflow alone gives the turbo speed state no gradient path at all.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-num">05</div>
+    <div class="section-body">
+      <h2>Staged identification</h2>
+      <p>The fix follows from the diagnosis. If the joint problem is degenerate, do not solve the
+        joint problem. Identify each map against its own ground truth, offline, with no ODE in the
+        loop, in an order where each stage leaves exactly one unknown.</p>
+
+      <div class="scroller">
+        <table>
+          <caption>The staged pipeline</caption>
+          <thead>
+            <tr><th scope="col">Step</th><th scope="col">Map</th><th scope="col">Ground truth</th><th scope="col">Result</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><th scope="row">eta_v</th><td>logged engine load (g/rev)</td><td class="metric">RMSE 0.033</td></tr>
+            <tr><td>2</td><th scope="row">comp_map</th><td>real boost, by air-path inversion</td><td class="metric">RMSE 0.012 PR</td></tr>
+            <tr><td>3</td><th scope="row">eta_t</th><td>turbo speed from power balance</td><td class="metric">RMSE 0.017</td></tr>
+            <tr><td>4</td><th scope="row">egt</th><td>physics exhaust-temp pseudo-label</td><td class="metric">RMSE 4.3 K</td></tr>
+            <tr><td>&mdash;</td><th scope="row">eta_c</th><td>digitized efficiency islands</td><td>frozen lookup</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Step 2 is the one worth explaining</h3>
+      <p>With volumetric efficiency and throttle pinned, the steady manifold balance
+        <span class="mono">throttle_flow(&hellip;) = cylinder_flow(&hellip;)</span> has exactly one
+        unknown &mdash; boost pressure &mdash; and is invertible at every logged point. That
+        recovers the compressor's <em>actual</em> operating points: the boost this specific turbo
+        made, not the boost the model wanted it to make. Reading turbo speed off the digitized
+        manufacturer map at those points gives (omega, mdot, PR) triples, and the compressor map
+        becomes a plain supervised regression &mdash; the sole remaining unknown, no ODE, no
+        degeneracy. The recovered map peaks near PR&nbsp;1.8, differing from the generic digitized
+        map that had been under-producing.</p>
+      <p>The inversion is only valid where the manifold is at steady state. Vacuum and
+        deceleration points have throttle flow below cylinder flow, so the fit uses boost points
+        above PR&nbsp;1.1 only.</p>
+
+      <h3>Step 3 uses the same trick one level up</h3>
+      <p>With the air path frozen, inverting the compressor map at the measured pressure ratio
+        gives a turbo speed target for every logged point. Steady-state shaft balance then solves
+        for the <span class="mono">eta_t &times; T_exh</span> product, and turbine efficiency is
+        fit to that. The product is a genuine limitation rather than a shortcut: this log set has
+        no EGT sensor and the two factors multiply, so only their product is identifiable. It
+        happens to be the product the turbo speed ODE depends on, so the model is correct where it
+        is used, but neither factor is separately calibrated.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-num">06</div>
+    <div class="section-body">
+      <h2>Results</h2>
+      <p>The turbo speed state now tracks the physics-derived target at correlation
+        <strong>0.948</strong> with a median ratio of <strong>1.013</strong> &mdash; within
+        1.3&thinsp;% across the operating range, against a flat collapse before.</p>
+
+      <div class="term">
+        <p class="term-cap">Assembled ODE, held-out validation windows</p>
+<pre>measured P  predicted P | omega_state  omega_target | PR_meas  PR@state
+     150.5        131.3 |       8369          9616  |   1.486     1.344
+     156.5        147.7 |       9922         10190  |   1.545     1.509
+
+                          previously: 117.1 / 6416 / 1.196</pre>
+      </div>
+
+      <div class="scroller">
+        <table>
+          <caption>The core trade</caption>
+          <thead>
+            <tr>
+              <th scope="col"></th>
+              <th scope="col">Joint fit</th>
+              <th scope="col">Staged, freeze</th>
+              <th scope="col">Staged + anchor</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Manifold-pressure RMSE</th><td class="metric">9.8 kPa</td><td class="metric">25.1 kPa</td><td class="metric">15.1 kPa</td></tr>
+            <tr><th scope="row">High-boost bias</th><td class="no">&minus;15.0 kPa</td><td>&minus;9.7 kPa</td><td class="ok">+5.4 kPa</td></tr>
+            <tr><th scope="row">eta_v at WOT</th><td class="no">1.06</td><td class="ok">0.77</td><td class="ok">0.77</td></tr>
+            <tr><th scope="row">Turbo speed</th><td class="no">collapsed</td><td class="ok">corr 0.940</td><td class="ok">13.3k peak</td></tr>
+            <tr><th scope="row">Maps individually</th><td class="no">wrong</td><td class="ok">correct</td><td class="ok">correct</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>The joint fit still has the best number and is still the worst model. Its 9.8&nbsp;kPa is
+        error cancellation across individually wrong maps; the staged model's 15&nbsp;kPa is what
+        remains when every upstream map is right.</p>
+
+      <h3>Where the residual lives</h3>
+      <p>An inconsistency probe compared the compressor map fed the ODE's turbo speed against the
+        same map fed the inverted target.</p>
+
+      <div class="term">
+        <p class="term-cap">Compressor map consistency probe</p>
+<pre>measP  predP | om_state  om_targ | PR_meas  PR@state  PR@target
+150.5  117.1 |    6416     9538  |  1.486     1.196      1.491
+159.9  123.1 |    7281    10318  |  1.578     1.252      1.588</pre>
+      </div>
+
+      <p><span class="mono">PR@target</span> matches the measured pressure ratio to three digits
+        &mdash; the compressor map is correct. The ODE's turbo speed is 30&thinsp;% below target
+        &mdash; the turbo <em>dynamics</em> were wrong. The correct map, fed a wrong speed,
+        correctly produces a wrong boost. Turbine efficiency had been left free in that retrain
+        and had become the new compensating degree of freedom, which is what motivated staging it.
+        Accurate maps are not an accurate model when one link in the chain is broken.</p>
+      <p><strong>The ~15&nbsp;kPa figure is a measured ceiling, not an excuse.</strong> Two
+        independent attempts to lower it &mdash; soft anchoring instead of hard freezing, and
+        pretraining the combustion maps &mdash; shifted the residual profile while leaving the
+        overall number unchanged. Both refinements are sound, and both confirmed the ceiling
+        rather than raising it.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-num">07</div>
+    <div class="section-body">
+      <h2>What the exercise established</h2>
+      <ol>
+        <li><strong>The turbo speed collapse was a symptom of a wrong volumetric efficiency</strong>,
+          not a turbo-physics problem or a data problem. Pinning volumetric efficiency to measured
+          airflow fixed the turbo, and the penalty term built to fix it directly turned out to be
+          a no-op &mdash; identical results at weights of 0, 1 and 100.</li>
+        <li><strong>Most &ldquo;learned&rdquo; maps were observable or already known.</strong> Only
+          torque, EGT, knock and wall-film are genuinely unobserved on this data and should be
+          learned at all.</li>
+        <li><strong>A better loss number from a grey-box model is not evidence of a better
+          model.</strong> Check every internal quantity against its physical range before
+          believing a residual.</li>
+        <li><strong>Single-member smoke tests are a different training regime.</strong> Two
+          loss-weight experiments looked like clear wins at one member and 40 epochs and reversed
+          at full training &mdash; including one where the under-trained run had the opposite sign
+          of bias to the converged run.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-num">08</div>
+    <div class="section-body">
+      <h2>Limits, and what would move them</h2>
+      <p>One quasi-steady wide-open-throttle log from one vehicle. No wastegate-duty sweep, no EGT
+        sensor, no dyno torque. Turbine efficiency and exhaust temperature are identified only as
+        a product. Cross-log generalisation was measured at 45.3&nbsp;kPa but at an earlier model
+        that predates staged identification, so it has not been re-measured. The uncertainty
+        calibration uses a vehicle-dynamics torque pseudo-label, and the fitted scale factor of
+        5.29 says the raw ensemble is roughly five times overconfident against it.</p>
+      <p>The single largest lever is <strong>a wastegate-duty sweep with an EGT sensor</strong>.
+        Stepping wastegate duty across one pull directly observes turbine efficiency against
+        boost, and EGT splits the efficiency-temperature product into absolute calibrations. That
+        is a data-collection problem, not a modelling one.</p>
+    </div>
+  </section>
+
+  <footer class="colophon">
+    <div class="section-num">&mdash;</div>
+    <div class="colophon-body">
+      <p><strong>Implementation.</strong> Julia with SciML (OrdinaryDiffEq, SciMLSensitivity, Lux,
+        Zygote) for identification and training; pure-Python inference from an exported JSON
+        artifact with no Julia at runtime. Both sides implement the same equations independently
+        and are held to bit-for-bit agreement by a cross-language parity test &mdash; which is how
+        two silent bugs were caught, unnormalised network inputs and a column-major weight reshape.</p>
+      <p><strong>Source.</strong> AGPL-3.0. The repository is private because the ECU logs and the
+        digitized manufacturer compressor map aren't mine to redistribute; the code itself is
+        available on request.</p>
+      <p><strong>Tucker Ashmore</strong> &middot; 2026</p>
+    </div>
+  </footer>
+
+</div>
+
+<style>
+  .mono { font-family: var(--mono); font-size: 0.9em; }
+</style>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var stored = null;
+    try { stored = localStorage.getItem("theme"); } catch (e) {}
+    if (stored) { root.setAttribute("data-theme", stored); }
+    document.getElementById("themer").addEventListener("click", function () {
+      var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      var current = root.getAttribute("data-theme") || (dark ? "dark" : "light");
+      var next = current === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem("theme", next); } catch (e) {}
+    });
+  })();
+</script>
+</body>
+</html>
