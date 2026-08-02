@@ -508,6 +508,12 @@
       <p>Four states are integrated in time: intake manifold pressure, turbo speed, fuel wall-film
         mass, and metal temperature (frozen here, since its time constant far exceeds the
         shooting window).</p>
+      <p>The wall-film state is there because the EJ255 is <strong>port injected</strong>. Injected
+        fuel partly deposits on the port wall and valve back and evaporates on a time constant, so
+        the fuel reaching the cylinder lags commanded injection through a throttle transient. On a
+        direct-injection engine the term would be close to meaningless. It also means those
+        parameters are observable only in transients: on a steady point the term contributes
+        nothing.</p>
       <p>Turbo speed is carried as a sigmoid logit rather than directly. That matters more than it
         looks: the bound becomes a property of the coordinate, so the state cannot go negative and
         the Jacobian self-zeros at the rails instead of producing a discontinuous adjoint at a
