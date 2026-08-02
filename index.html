@@ -442,7 +442,7 @@
     <p class="eyebrow">Grey-box system identification &middot; Julia / SciML</p>
     <h1>Identifying a grey-box engine model from consumer ECU datalogs</h1>
     <p class="standfirst">A neural-ODE model of a turbocharged Subaru EJ255 that fit the measured
-      data well and got the physics badly wrong &mdash; how that was diagnosed, and the staged
+      data well and got the physics badly wrong. How that was diagnosed, and the staged
       identification method that fixed it.</p>
     <p class="byline">
       <span><strong>Tucker Ashmore</strong></span>
@@ -481,7 +481,7 @@
       <p>That requires a model that extrapolates, which requires the model's internal quantities
         to mean what they claim to mean. Two standard options both fail that requirement.
         <strong>Black-box regression</strong> on logged data interpolates well and extrapolates
-        arbitrarily &mdash; nothing in it is constrained to be physical. A <strong>full physical
+        arbitrarily, because nothing in it is constrained to be physical. A <strong>full physical
         mean-value model</strong> extrapolates correctly but needs calibration data a consumer
         datalog does not contain: compressor and turbine maps for the specific unit, volumetric
         efficiency surfaces, wall-film parameters.</p>
@@ -491,7 +491,7 @@
         integrating the ODE and back-propagating trajectory error onto the network weights through
         the solver adjoint.</p>
       <p>Target hardware is a Subaru EJ255, 2.5&nbsp;L flat-four, TD04-13T turbo. The data is stock
-        ECU datalogs at roughly 50&nbsp;Hz &mdash; six logs across three logging platforms, 7,109
+        ECU datalogs at roughly 50&nbsp;Hz: six logs across three logging platforms, 7,109
         rows in the merged set, plus the LiU-ICE academic engine benchmark run through the same
         pipeline as an external check.</p>
       <p>Volume is not the difficulty. <em>Which channels a stock ECU exposes</em> is. A dyno cell
@@ -512,12 +512,12 @@
       <p>Turbo speed is carried as a sigmoid logit rather than directly. That matters more than it
         looks: the bound becomes a property of the coordinate, so the state cannot go negative and
         the Jacobian self-zeros at the rails instead of producing a discontinuous adjoint at a
-        clamp. An earlier version integrated turbo speed directly and clamped it &mdash; the clamp
+        clamp. An earlier version integrated turbo speed directly and clamped it, and the clamp
         masked the identifiability failure below, because manifold pressure still fit while the
         underlying state ranged from &minus;927,000 to 57,000&nbsp;rad/s.</p>
 
       <div class="term">
-        <p class="term-cap">Right-hand side &mdash; mean-value engine model</p>
+        <p class="term-cap">Right-hand side: mean-value engine model</p>
 <pre>mdot_cyl  = eta_v * P_m * V_d * N / (2 * R * T_m)      speed-density
 P_boost   = P_atm * comp_map(omega, mdot_cyl)
 mdot_thr  = throttle_flow(alpha, P_boost, T_m, P_m)    compressible orifice
@@ -594,7 +594,7 @@ dm_puddle/dt = X*mdot_f_inj - m_puddle/tau</pre>
         <li><strong>Turbo speed collapses because the turbine is energy-negative.</strong>
           Decomposing <span class="mono">domega</span> at a high-boost point showed the turbine
           producing ~0.6&nbsp;kW against a ~1.5&nbsp;kW compressor load. With that sign the state
-          must decelerate, and no penalty term can hold it up &mdash; confirmed dead up to a
+          must decelerate, and no penalty term can hold it up. It was confirmed dead up to a
           weight of 5,000, by which point the penalty had wrecked the pressure fit and the turbo
           speed had barely moved.</li>
         <li><strong>The turbine is starved because backpressure is tiny.</strong> Measured
@@ -615,7 +615,7 @@ dm_puddle/dt = X*mdot_f_inj - m_puddle/tau</pre>
         full area. The model was choking an engine its own compressor map was correctly boosting.</p>
       <p>One more probe corrected an assumption carried for weeks: the logs are <em>not</em>
         quasi-steady. The wide-open-throttle log contains 182 spool events. Turbo speed was not
-        unidentifiable for lack of transients &mdash; it was unidentifiable because a free neural
+        unidentifiable for lack of transients. It was unidentifiable because a free neural
         compressor map keyed on airflow alone gives the turbo speed state no gradient path at all.</p>
     </div>
   </section>
@@ -647,11 +647,11 @@ dm_puddle/dt = X*mdot_f_inj - m_puddle/tau</pre>
       <h3>Step 2 is the one worth explaining</h3>
       <p>With volumetric efficiency and throttle pinned, the steady manifold balance
         <span class="mono">throttle_flow(&hellip;) = cylinder_flow(&hellip;)</span> has exactly one
-        unknown &mdash; boost pressure &mdash; and is invertible at every logged point. That
+        unknown, boost pressure, and is invertible at every logged point. That
         recovers the compressor's <em>actual</em> operating points: the boost this specific turbo
         made, not the boost the model wanted it to make. Reading turbo speed off the digitized
         manufacturer map at those points gives (omega, mdot, PR) triples, and the compressor map
-        becomes a plain supervised regression &mdash; the sole remaining unknown, no ODE, no
+        becomes a plain supervised regression: the sole remaining unknown, no ODE, no
         degeneracy. The recovered map peaks near PR&nbsp;1.8, differing from the generic digitized
         map that had been under-producing.</p>
       <p>The inversion is only valid where the manifold is at steady state. Vacuum and
@@ -674,7 +674,7 @@ dm_puddle/dt = X*mdot_f_inj - m_puddle/tau</pre>
     <div class="section-body">
       <h2>Results</h2>
       <p>The turbo speed state now tracks the physics-derived target at correlation
-        <strong>0.948</strong> with a median ratio of <strong>1.013</strong> &mdash; within
+        <strong>0.948</strong> with a median ratio of <strong>1.013</strong>, within
         1.3&thinsp;% across the operating range, against a flat collapse before.</p>
 
       <div class="term">
@@ -723,14 +723,14 @@ dm_puddle/dt = X*mdot_f_inj - m_puddle/tau</pre>
       </div>
 
       <p><span class="mono">PR@target</span> matches the measured pressure ratio to three digits
-        &mdash; the compressor map is correct. The ODE's turbo speed is 30&thinsp;% below target
-        &mdash; the turbo <em>dynamics</em> were wrong. The correct map, fed a wrong speed,
+        and so the compressor map is correct. The ODE's turbo speed is 30&thinsp;% below target
+        so the turbo <em>dynamics</em> were wrong. The correct map, fed a wrong speed,
         correctly produces a wrong boost. Turbine efficiency had been left free in that retrain
         and had become the new compensating degree of freedom, which is what motivated staging it.
         Accurate maps are not an accurate model when one link in the chain is broken.</p>
       <p><strong>The ~15&nbsp;kPa figure is a measured ceiling, not an excuse.</strong> Two
-        independent attempts to lower it &mdash; soft anchoring instead of hard freezing, and
-        pretraining the combustion maps &mdash; shifted the residual profile while leaving the
+        independent attempts to lower it (soft anchoring instead of hard freezing, and
+        pretraining the combustion maps) shifted the residual profile while leaving the
         overall number unchanged. Both refinements are sound, and both confirmed the ceiling
         rather than raising it.</p>
     </div>
@@ -744,7 +744,7 @@ dm_puddle/dt = X*mdot_f_inj - m_puddle/tau</pre>
         <li><strong>The turbo speed collapse was a symptom of a wrong volumetric efficiency</strong>,
           not a turbo-physics problem or a data problem. Pinning volumetric efficiency to measured
           airflow fixed the turbo, and the penalty term built to fix it directly turned out to be
-          a no-op &mdash; identical results at weights of 0, 1 and 100.</li>
+          a no-op, with identical results at weights of 0, 1 and 100.</li>
         <li><strong>Most &ldquo;learned&rdquo; maps were observable or already known.</strong> Only
           torque, EGT, knock and wall-film are genuinely unobserved on this data and should be
           learned at all.</li>
@@ -753,7 +753,7 @@ dm_puddle/dt = X*mdot_f_inj - m_puddle/tau</pre>
           believing a residual.</li>
         <li><strong>Single-member smoke tests are a different training regime.</strong> Two
           loss-weight experiments looked like clear wins at one member and 40 epochs and reversed
-          at full training &mdash; including one where the under-trained run had the opposite sign
+          at full training, including one where the under-trained run had the opposite sign
           of bias to the converged run.</li>
       </ol>
     </div>
@@ -763,15 +763,15 @@ dm_puddle/dt = X*mdot_f_inj - m_puddle/tau</pre>
     <div class="section-num">08</div>
     <div class="section-body">
       <h2>Limits, and what would move them</h2>
-      <p>The dataset is six logs across three logging platforms &mdash; Cobb, RomRaider and
-        Viceman &mdash; totalling 7,109 rows in the merged set, alongside the LiU-ICE academic
+      <p>The dataset is six logs across three logging platforms (Cobb, RomRaider and
+        Viceman) totalling 7,109 rows in the merged set, alongside the LiU-ICE academic
         engine benchmark converted into the same pipeline as an external check on the cleaning and
         windowing code. Volume is not the constraint. <strong>Two specific missing measurements
         are.</strong></p>
       <p><strong>No exhaust-gas temperature channel.</strong> Turbine efficiency and exhaust
         temperature multiply in the turbine power balance, so only their product is identifiable.
         That product is what the turbo speed ODE depends on, so the model is correct where it is
-        used &mdash; but neither factor is separately calibrated.</p>
+        used, but neither factor is separately calibrated.</p>
       <p><strong>No wastegate-duty sweep.</strong> Stepping wastegate duty across a single pull is
         what observes turbine efficiency against boost independently of the rest of the air path.</p>
       <p>Those two set the ~15&nbsp;kPa floor, and both are an afternoon of instrumented driving.
@@ -791,7 +791,7 @@ dm_puddle/dt = X*mdot_f_inj - m_puddle/tau</pre>
       <p><strong>Implementation.</strong> Julia with SciML (OrdinaryDiffEq, SciMLSensitivity, Lux,
         Zygote) for identification and training; pure-Python inference from an exported JSON
         artifact with no Julia at runtime. Both sides implement the same equations independently
-        and are held to bit-for-bit agreement by a cross-language parity test &mdash; which is how
+        and are held to bit-for-bit agreement by a cross-language parity test. That is how
         two silent bugs were caught, unnormalised network inputs and a column-major weight reshape.</p>
       <p><strong>Source.</strong> AGPL-3.0. The repository is private because the ECU logs and the
         digitized manufacturer compressor map aren't mine to redistribute; the code itself is
