@@ -492,8 +492,7 @@
         the solver adjoint.</p>
       <p>Target hardware is a Subaru EJ255, 2.5&nbsp;L flat-four, TD04-13T turbo. The data is stock
         ECU datalogs at roughly 50&nbsp;Hz: six logs across three logging platforms, 7,109
-        rows in the merged set, plus the LiU-ICE academic engine benchmark run through the same
-        pipeline as an external check.</p>
+        rows in the merged set.</p>
       <p>Volume is not the difficulty. <em>Which channels a stock ECU exposes</em> is. A dyno cell
         measures airflow, exhaust temperature, turbo speed and torque directly. A stock ECU gives
         manifold pressure, engine speed, throttle position, commanded lambda, spark advance and an
@@ -764,9 +763,7 @@ dm_puddle/dt = X*mdot_f_inj - m_puddle/tau</pre>
     <div class="section-body">
       <h2>Limits, and what would move them</h2>
       <p>The dataset is six logs across three logging platforms (Cobb, RomRaider and
-        Viceman) totalling 7,109 rows in the merged set, alongside the LiU-ICE academic
-        engine benchmark converted into the same pipeline as an external check on the cleaning and
-        windowing code. Volume is not the constraint. <strong>Two specific missing measurements
+        Viceman) totalling 7,109 rows in the merged set. Volume is not the constraint. <strong>Two specific missing measurements
         are.</strong></p>
       <p><strong>No exhaust-gas temperature channel.</strong> Turbine efficiency and exhaust
         temperature multiply in the turbine power balance, so only their product is identifiable.
